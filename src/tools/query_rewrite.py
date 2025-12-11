@@ -4,29 +4,42 @@ import ollama
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://host.docker.internal:11434")
 client = ollama.Client(host=OLLAMA_HOST)
 
+import json
+
 PROMPT = """
-Rewrite the user's job search query into a clean keyword format.
-Extract only entities strictly present in the text:
-- role
-- skills
-- experience
-- location
+Analyze the user's job search query and extract structured parameters.
+Return valid JSON ONLY.
 
-Do NOT invent a location or experience if the user did not provide one.
+Fields:
+- keywords: (string) Core search terms (roles, skills, tech stack). Remove location/experience words.
+- location: (string or null) The city or region specified.
+- experience: (integer or null) Years of experience mentioned.
 
-Examples:
-Input: "python dev in london" -> python developer london
-Input: "java expert" -> java expert
+Example:
+Input: "backend role in bangalore for 5 years"
+Output: {"keywords": "backend developer", "location": "bangalore", "experience": 5}
 
-Output MUST be a clean string. No quotes. No extra text.
+Input: "python remote"
+Output: {"keywords": "python", "location": "remote", "experience": null}
 """
 
 def run(text: str):
     response = client.chat(
         model="qwen2.5:3b-instruct",
+        format="json",
         messages=[
             {"role": "system", "content": PROMPT},
             {"role": "user", "content": text}
         ]
     )
-    return {"rewritten_query": response["message"]["content"].strip()}
+    try:
+        data = json.loads(response["message"]["content"])
+        # Ensure keys exist
+        return {
+            "rewritten_query": data.get("keywords", text),
+            "location": data.get("location"),
+            "experience": data.get("experience")
+        }
+    except:
+        # Fallback
+        return {"rewritten_query": text, "location": None, "experience": None}

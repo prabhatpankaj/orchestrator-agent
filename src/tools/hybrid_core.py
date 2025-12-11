@@ -54,22 +54,52 @@ def get_aerospike_details(job_ids):
         print(f"Aerospike batch fetch error: {e}")
         return {}
 
-def hybrid_search(query: str):
+def hybrid_search(query: str, location: str = None, experience: int = None):
     vector = embed(query)
 
+    # Build Filters
+    filters = []
+    if location:
+        filters.append({"match": {"location": location}})
+    
+    if experience is not None:
+        if isinstance(experience, dict):
+            filters.append({"range": {"experience": experience}})
+        else:
+            # Range: exact years tolerance, but at least 0
+            min_exp = max(0, experience) 
+            max_exp = experience + 5
+            filters.append({"range": {"experience": {"gte": min_exp, "lte": max_exp}}})
+
     # Sparse (BM25)
+    bool_query = {
+        "bool": {
+            "must": [{"multi_match": {"query": query, "fields": ["title", "description", "skills"]}}],
+            "filter": filters
+        }
+    }
+
     bm25 = ES.search(
         index="jobs",
         size=50,
-        _source={"excludes": ["embedding"]}, # Fetch source, exclude heavy vector
-        query={"multi_match": {"query": query, "fields": ["title", "description", "skills"]}},
+        _source={"excludes": ["embedding"]},
+        query=bool_query,
     )
 
     # Dense (KNN)
+    knn_search = {
+        "field": "embedding",
+        "query_vector": vector,
+        "k": 50,
+        "num_candidates": 100
+    }
+    if filters:
+        knn_search["filter"] = filters
+
     dense = ES.search(
         index="jobs",
         _source={"excludes": ["embedding"]},
-        knn={"field": "embedding", "query_vector": vector, "k": 50, "num_candidates": 100},
+        knn=knn_search,
     )
 
     # Collect Scores & Source Data

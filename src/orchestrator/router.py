@@ -26,9 +26,9 @@ def run_workflow(json_text: str):
         # 1. If job_search follows query_rewrite, use the rewritten query
         if tool_name == "job_search" and "query_rewrite" in context:
             rewritten = context["query_rewrite"]
-            # It returns a dict {"rewritten_query": "..."}
-            if isinstance(rewritten, dict) and "rewritten_query" in rewritten:
-                inp = rewritten["rewritten_query"]
+            # It returns a dict {"rewritten_query": "...", "location": ..., "experience": ...}
+            if isinstance(rewritten, dict):
+                inp = rewritten
         
         # 2. If rerank follows job_search, use the candidate list
         if tool_name == "rerank" and "job_search" in context:
