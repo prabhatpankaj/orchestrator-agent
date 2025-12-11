@@ -5,3 +5,7 @@ ollama
 fastapi
 uvicorn
 requests
+aiomysql
+aerospike
+async-timeout
+pymysql

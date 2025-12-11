@@ -23,6 +23,13 @@ ENV PYTHONPATH=/app
 # ---------------------------------------------------------
 # Install dependencies for orchestrator & UI
 # ---------------------------------------------------------
+# Install build deps for Aerospike/Misc
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libssl-dev \
+    zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN pip install --no-cache-dir -r src/requirements.txt
 
 # ---------------------------------------------------------

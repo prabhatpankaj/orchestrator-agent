@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS jobs (
+    job_id VARCHAR(255) PRIMARY KEY,
+    title TEXT,
+    description TEXT,
+    location VARCHAR(255),
+    experience INTEGER,
+    skills TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);

@@ -46,6 +46,33 @@ services:
       - hf_cache:/root/.cache/huggingface
 
   # -----------------------------------------------------------------
+  # 🗄️ MySQL (Primary Job Store)
+  # -----------------------------------------------------------------
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: jobs_db
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  # -----------------------------------------------------------------
+  # 🚀 Aerospike (High-Speed KV Cache)
+  # -----------------------------------------------------------------
+  aerospike:
+    image: aerospike/aerospike-server
+    container_name: aerospike
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+      - "3002:3002"
+    volumes:
+      - aerospike_data:/opt/aerospike/data
+
+  # -----------------------------------------------------------------
   # 🤖 Orchestrator (runs Python src/, calls local Mac Ollama)
   # -----------------------------------------------------------------
   orchestrator:
@@ -57,11 +84,18 @@ services:
       - OLLAMA_HOST=http://host.docker.internal:11434
       - ES_HOST=http://elasticsearch:9200
       - EMBEDDING_API=http://embeddings:8002/encode
+      - ES_HOST=http://elasticsearch:9200
+      - EMBEDDING_API=http://embeddings:8002/encode
+      - MYSQL_HOST=mysql
+      - AEROSPIKE_HOST=aerospike
+      - AEROSPIKE_PORT=3000
     volumes:
       - .:/app
     depends_on:
       - elasticsearch
       - embeddings
+      - mysql
+      - aerospike
 
   # -----------------------------------------------------------------
   # 🖥️ Streamlit UI (separate process, same src codebase)
@@ -78,6 +112,8 @@ services:
       - .:/app
     depends_on:
       - orchestrator
+      - mysql
+      - aerospike
 
 # -------------------------------------------------------------------
 # Persistent Volumes
@@ -86,3 +122,5 @@ volumes:
   es_data:
   kibana_data:
   hf_cache:
+  mysql_data:
+  aerospike_data:
