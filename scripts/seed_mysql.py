@@ -39,7 +39,7 @@ def seed_data():
     cursor.execute(f"USE {MYSQL_DB}")
 
     # Read init.sql
-    with open("scripts/init_db.sql", "r") as f:
+    with open("init_db.sql", "r") as f:
         sql = f.read()
         cursor.execute(sql)
     

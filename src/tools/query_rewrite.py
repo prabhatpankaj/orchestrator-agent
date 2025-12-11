@@ -6,16 +6,19 @@ client = ollama.Client(host=OLLAMA_HOST)
 
 PROMPT = """
 Rewrite the user's job search query into a clean keyword format.
-Extract:
+Extract only entities strictly present in the text:
 - role
-- skills (if present)
+- skills
 - experience
 - location
-Output MUST be a clean string, e.g.:
 
-python developer 6 years bangalore
+Do NOT invent a location or experience if the user did not provide one.
 
-No quotes. No extra text.
+Examples:
+Input: "python dev in london" -> python developer london
+Input: "java expert" -> java expert
+
+Output MUST be a clean string. No quotes. No extra text.
 """
 
 def run(text: str):
@@ -26,4 +29,4 @@ def run(text: str):
             {"role": "user", "content": text}
         ]
     )
-    return response["message"]["content"].strip()
+    return {"rewritten_query": response["message"]["content"].strip()}

@@ -57,44 +57,50 @@ def get_aerospike_details(job_ids):
 def hybrid_search(query: str):
     vector = embed(query)
 
-    # Sparse (BM25) - ID only
+    # Sparse (BM25)
     bm25 = ES.search(
         index="jobs",
-        size=100,
-        _source=False, # Fetch ID only
+        size=50,
+        _source={"excludes": ["embedding"]}, # Fetch source, exclude heavy vector
         query={"multi_match": {"query": query, "fields": ["title", "description", "skills"]}},
     )
 
-    # Dense (KNN) - ID only
+    # Dense (KNN)
     dense = ES.search(
         index="jobs",
-        _source=False, # Fetch ID only
-        knn={"field": "embedding", "query_vector": vector, "k": 100, "num_candidates": 200},
+        _source={"excludes": ["embedding"]},
+        knn={"field": "embedding", "query_vector": vector, "k": 50, "num_candidates": 100},
     )
 
-    # Collect Scores
+    # Collect Scores & Source Data
     scores = {}
+    es_source_map = {}
 
     for hit in bm25["hits"]["hits"]:
         jid = hit["_id"]
         scores[jid] = {"bm25": hit["_score"], "dense": 0}
+        es_source_map[jid] = hit["_source"]
 
     for hit in dense["hits"]["hits"]:
         jid = hit["_id"]
         if jid not in scores:
             scores[jid] = {"bm25": 0, "dense": hit["_score"]}
+            es_source_map[jid] = hit["_source"]
         else:
             scores[jid]["dense"] = hit["_score"]
 
-    # Fetch Details from Aerospike
+    # Fetch Details from Aerospike (Preferred Source)
     all_ids = list(scores.keys())
     details_map = get_aerospike_details(all_ids)
 
     final_results = []
     for jid, score_data in scores.items():
-        if jid in details_map:
+        # Source Priority: Aerospike > Elasticsearch
+        source = details_map.get(jid) or es_source_map.get(jid)
+        
+        if source:
             final_results.append({
-                "source": details_map[jid], # Use Aerospike data as source
+                "source": source,
                 "bm25": score_data["bm25"],
                 "dense": score_data["dense"]
             })

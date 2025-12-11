@@ -60,6 +60,22 @@ services:
       - mysql_data:/var/lib/mysql
 
   # -----------------------------------------------------------------
+  # 🗄️ phpMyAdmin (MySQL UI)
+  # -----------------------------------------------------------------
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin
+    platform: linux/amd64
+    environment:
+      PMA_HOST: mysql
+      PMA_USER: root
+      PMA_PASSWORD: root
+    ports:
+      - "8080:80"
+    depends_on:
+      - mysql
+
+  # -----------------------------------------------------------------
   # 🚀 Aerospike (High-Speed KV Cache)
   # -----------------------------------------------------------------
   aerospike:
@@ -91,6 +107,7 @@ services:
       - AEROSPIKE_PORT=3000
     volumes:
       - .:/app
+      - ./scripts:/app/scripts
     depends_on:
       - elasticsearch
       - embeddings
