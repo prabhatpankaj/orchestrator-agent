@@ -2,6 +2,7 @@ from elasticsearch import Elasticsearch
 import requests
 import aerospike
 import os
+from src.tools.query_builder import ElasticsearchQueryBuilder
 
 # 1. Connect to ES
 ES = Elasticsearch("http://elasticsearch:9200")
@@ -56,50 +57,42 @@ def get_aerospike_details(job_ids):
 
 def hybrid_search(query: str, location: str = None, experience: int = None):
     vector = embed(query)
-
-    # Build Filters
-    filters = []
-    if location:
-        filters.append({"match": {"location": location}})
+    
+    # Initialize Builder
+    builder = ElasticsearchQueryBuilder()
+    builder.set_source_excludes(["embedding"])
+    
+    # 1. Text Search
+    # Weighting: Title > Skills > Description
+    builder.add_text_search(query, ["title^3", "skills^2", "description"])
+    
+    # 2. Filters
+    builder.add_filter("location", location)
     
     if experience is not None:
         if isinstance(experience, dict):
-            filters.append({"range": {"experience": experience}})
+             # Pass dictionary directly
+             builder.add_range_filter("experience", experience)
         else:
-            # Range: exact years tolerance, but at least 0
-            min_exp = max(0, experience) 
-            max_exp = experience + 5
-            filters.append({"range": {"experience": {"gte": min_exp, "lte": max_exp}}})
+             # Calculate range logic
+             min_exp = max(0, experience)
+             max_exp = experience + 5
+             range_dict = {"gte": min_exp, "lte": max_exp}
+             builder.add_range_filter("experience", range_dict)
 
-    # Sparse (BM25)
-    bool_query = {
-        "bool": {
-            "must": [{"multi_match": {"query": query, "fields": ["title", "description", "skills"]}}],
-            "filter": filters
-        }
-    }
+    # 3. KNN Config
+    builder.set_knn(vector, k=50, num_candidates=100)
 
+    # Execute Searches
     bm25 = ES.search(
         index="jobs",
         size=50,
-        _source={"excludes": ["embedding"]},
-        query=bool_query,
+        **builder.build_bm25_query()
     )
-
-    # Dense (KNN)
-    knn_search = {
-        "field": "embedding",
-        "query_vector": vector,
-        "k": 50,
-        "num_candidates": 100
-    }
-    if filters:
-        knn_search["filter"] = filters
 
     dense = ES.search(
         index="jobs",
-        _source={"excludes": ["embedding"]},
-        knn=knn_search,
+        **builder.build_knn_query()
     )
 
     # Collect Scores & Source Data
