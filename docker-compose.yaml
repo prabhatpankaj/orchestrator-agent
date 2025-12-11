@@ -1,0 +1,88 @@
+services:
+  # -----------------------------------------------------------------
+  # 🔍 Elasticsearch (BM25 + Vector Search)
+  # -----------------------------------------------------------------
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms2g -Xmx2g
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+      - ./scripts:/app/scripts
+
+  # -----------------------------------------------------------------
+  # 📊 Kibana (optional)
+  # -----------------------------------------------------------------
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.0
+    container_name: kibana
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    volumes:
+      - kibana_data:/usr/share/kibana/data
+
+  # -----------------------------------------------------------------
+  # ⚙️ Embedding Server (FastAPI + Sentence Transformers)
+  # -----------------------------------------------------------------
+  embeddings:
+    build:
+      context: ./embeddings
+      dockerfile: Dockerfile
+    container_name: embeddings
+    environment:
+      - MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
+    ports:
+      - "8002:8002"
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+
+  # -----------------------------------------------------------------
+  # 🤖 Orchestrator (runs Python src/, calls local Mac Ollama)
+  # -----------------------------------------------------------------
+  orchestrator:
+    build:
+      context: .
+      dockerfile: src/Dockerfile
+    container_name: orchestrator
+    environment:
+      - OLLAMA_HOST=http://host.docker.internal:11434
+      - ES_HOST=http://elasticsearch:9200
+      - EMBEDDING_API=http://embeddings:8002/encode
+    volumes:
+      - .:/app
+    depends_on:
+      - elasticsearch
+      - embeddings
+
+  # -----------------------------------------------------------------
+  # 🖥️ Streamlit UI (separate process, same src codebase)
+  # -----------------------------------------------------------------
+  ui:
+    build:
+      context: .
+      dockerfile: src/Dockerfile
+    container_name: orchestrator-ui
+    command: streamlit run src/ui/app.py --server.address=0.0.0.0 --server.port=8501
+    ports:
+      - "8501:8501"
+    volumes:
+      - .:/app
+    depends_on:
+      - orchestrator
+
+# -------------------------------------------------------------------
+# Persistent Volumes
+# -------------------------------------------------------------------
+volumes:
+  es_data:
+  kibana_data:
+  hf_cache:

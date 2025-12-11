@@ -1,0 +1,7 @@
+streamlit
+elasticsearch==8.13.0
+sentence-transformers
+ollama
+fastapi
+uvicorn
+requests

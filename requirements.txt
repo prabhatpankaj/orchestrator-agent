@@ -1,4 +1,0 @@
-ollama
-streamlit
-fastapi
-uvicorn
