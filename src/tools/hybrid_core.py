@@ -84,48 +84,65 @@ def hybrid_search(query: str, location: str = None, experience: int = None):
     builder.set_knn(vector, k=50, num_candidates=100)
 
     # Execute Searches
-    bm25 = ES.search(
-        index="jobs",
-        size=50,
-        **builder.build_bm25_query()
-    )
+    try:
+        bm25 = ES.search(
+            index="jobs",
+            size=50,
+            **builder.build_bm25_query()
+        )
+    except Exception as e:
+        print(f"BM25 Search Error: {e}")
+        bm25 = {"hits": {"hits": []}}
 
-    dense = ES.search(
-        index="jobs",
-        **builder.build_knn_query()
-    )
+    try:
+        dense = ES.search(
+            index="jobs",
+            **builder.build_knn_query()
+        )
+    except Exception as e:
+        print(f"Dense Search Error: {e}")
+        dense = {"hits": {"hits": []}}
 
-    # Collect Scores & Source Data
+    # RRF (Reciprocal Rank Fusion)
+    # score = 1 / (k + rank)
+    k = 60
     scores = {}
     es_source_map = {}
 
-    for hit in bm25["hits"]["hits"]:
-        jid = hit["_id"]
-        scores[jid] = {"bm25": hit["_score"], "dense": 0}
-        es_source_map[jid] = hit["_source"]
+    def add_score(hits, rank_type):
+        for i, hit in enumerate(hits):
+            jid = hit["_id"]
+            if jid not in scores:
+                scores[jid] = 0
+                es_source_map[jid] = hit["_source"]
+            
+            # 1 / (k + rank), rank is 1-based usually, or 0-based. 
+            # using i+1 for 1-based rank
+            scores[jid] += 1 / (k + i + 1)
 
-    for hit in dense["hits"]["hits"]:
-        jid = hit["_id"]
-        if jid not in scores:
-            scores[jid] = {"bm25": 0, "dense": hit["_score"]}
-            es_source_map[jid] = hit["_source"]
-        else:
-            scores[jid]["dense"] = hit["_score"]
+    add_score(bm25["hits"]["hits"], "bm25")
+    add_score(dense["hits"]["hits"], "dense")
 
     # Fetch Details from Aerospike (Preferred Source)
     all_ids = list(scores.keys())
     details_map = get_aerospike_details(all_ids)
 
     final_results = []
-    for jid, score_data in scores.items():
+    for jid, score in scores.items():
         # Source Priority: Aerospike > Elasticsearch
         source = details_map.get(jid) or es_source_map.get(jid)
         
         if source:
             final_results.append({
+                "id": jid,
                 "source": source,
-                "bm25": score_data["bm25"],
-                "dense": score_data["dense"]
+                "score": score,
+                # Keep raw scores for debug if needed, but RRF is the main one now
+                "bm25_score": 0, # Not tracking individual raw scores anymore for simplicity
+                "dense_score": 0
             })
+    
+    # Sort by RRF score descending
+    final_results.sort(key=lambda x: x["score"], reverse=True)
     
     return final_results

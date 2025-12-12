@@ -26,24 +26,34 @@ def run_workflow(json_text: str):
         # 1. If job_search follows query_rewrite, use the rewritten query
         if tool_name == "job_search" and "query_rewrite" in context:
             rewritten = context["query_rewrite"]
-            # It returns a dict {"rewritten_query": "...", "location": ..., "experience": ...}
             if isinstance(rewritten, dict):
                 inp = rewritten
         
         # 2. If rerank follows job_search, use the candidate list
         if tool_name == "rerank" and "job_search" in context:
-            candidates = context["job_search"]
-            if isinstance(candidates, list):
-                inp = candidates
+            job_output = context["job_search"]
+            # Correctly extract 'jobs' list from the previous tool's dict output
+            if isinstance(job_output, dict) and "jobs" in job_output:
+                inp = job_output["jobs"]
+            elif isinstance(job_output, list):
+                inp = job_output
 
         # --------------------------------------------------------
         # EXECUTION
         # --------------------------------------------------------
-        fn = TOOL_MAP[tool_name]
-        try:
-            output = fn(inp)
-        except Exception as e:
-            output = f"Error executing {tool_name}: {str(e)}"
+        if tool_name not in TOOL_MAP:
+            output = {"error": f"Tool {tool_name} not found"}
+        else:
+            fn = TOOL_MAP[tool_name]
+            try:
+                output = fn(inp)
+            except Exception as e:
+                output = {"error": f"Error executing {tool_name}: {str(e)}"}
+
+        # VALIDATION
+        if not isinstance(output, dict):
+             # Per instructions, enforce dict or raise/error
+             output = {"error": f"Tool '{tool_name}' returned invalid format. Expected dict, got {type(output).__name__}."}
 
         # Store context
         context[tool_name] = output

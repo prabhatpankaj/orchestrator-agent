@@ -11,14 +11,26 @@ def run(query_obj):
         loc = None
         exp = None
 
-    candidates = hybrid_search(query, location=loc, experience=exp)
+    candidate_list = []
+    
+    # Clean inputs
+    if query:
+        query = query.strip()
+        
+    # If query is empty but location/experience provided, we still run search (filtering).
+    # If EVERYTHING is empty, return empty list.
+    if not query and not loc and exp is None:
+         return {"jobs": []}
 
-    # Rank by Experience (Ascending) then Hybrid Score (Descending)
+    candidate_list = hybrid_search(query, location=loc, experience=exp)
+
+    # Rank by Experience (Ascending) then by RRF Score (Descending)
+    # We use valid experience values first. Missing experience maps to infinity (end of list).
     ranked = sorted(
-        candidates, 
+        candidate_list, 
         key=lambda x: (
             x["source"].get("experience", float('inf')), 
-            -(x["bm25"] + x["dense"])
+            -x["score"]
         )
     )
-    return ranked[:20]
+    return {"jobs": ranked[:20]}
